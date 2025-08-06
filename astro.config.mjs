@@ -19,8 +19,8 @@ export default defineConfig({
     defaultStrategy: 'hover'
   },
   server: {
-    port: 4000,
-    host: true
+    port: parseInt(process.env.PORT) || 4000,
+    host: process.env.HOST || '0.0.0.0'
   },
   vite: {
     define: {

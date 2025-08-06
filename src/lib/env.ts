@@ -40,5 +40,13 @@ export const TELEGRAM_API_HASH = process.env.TELEGRAM_API_HASH || '';
 
 // Validation
 if (!TELEGRAM_API_ID || !TELEGRAM_API_HASH) {
-  console.error('Missing Telegram API credentials in environment variables');
+  const errorMsg = 'Missing Telegram API credentials in environment variables';
+  console.error(errorMsg);
+
+  // In production, this is critical
+  if (process.env.NODE_ENV === 'production') {
+    console.error('TELEGRAM_API_ID:', TELEGRAM_API_ID || 'not set');
+    console.error('TELEGRAM_API_HASH:', TELEGRAM_API_HASH ? 'set' : 'not set');
+    console.error('Please set these environment variables in your Render dashboard');
+  }
 }
