@@ -1,0 +1,175 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="MTProto Telegram Client">
+  <div class="min-h-[calc(100vh-200px)] flex items-center justify-center">
+    <div id="session-selector-app"></div>
+  </div>
+</Layout>
+
+<script>
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+
+  // Session Selector React Component
+  function SessionSelector() {
+    const [sessions, setSessions] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+
+    React.useEffect(() => {
+      loadSessions();
+    }, []);
+
+    const loadSessions = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/sessions');
+        const data = await response.json();
+        
+        if (data.success) {
+          setSessions(data.sessions || []);
+        } else {
+          setError(data.message || 'Failed to load sessions');
+        }
+      } catch (err) {
+        console.error('Error loading sessions:', err);
+        setError('Failed to load sessions');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleSessionSelect = async (sessionId) => {
+      try {
+        const response = await fetch('/api/restore-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `sessionId=${sessionId}`
+        });
+
+        if (response.redirected) {
+          // Use smooth navigation with View Transitions
+          if ('startViewTransition' in document) {
+            document.startViewTransition(() => {
+              window.location.href = response.url;
+            });
+          } else {
+            window.location.href = response.url;
+          }
+        } else if (response.ok) {
+          // Use smooth navigation with View Transitions
+          const chatUrl = `/chat?session=${sessionId}`;
+          if ('startViewTransition' in document) {
+            document.startViewTransition(() => {
+              window.location.href = chatUrl;
+            });
+          } else {
+            window.location.href = chatUrl;
+          }
+        }
+      } catch (err) {
+        console.error('Error restoring session:', err);
+      }
+    };
+
+    const formatDate = (dateString) => {
+      try {
+        return new Date(dateString).toLocaleDateString();
+      } catch {
+        return 'Unknown';
+      }
+    };
+
+    if (loading) {
+      return React.createElement('div', { className: 'layout-centered container-elevated p-6' },
+        React.createElement('div', { className: 'text-center' },
+          React.createElement('div', { className: 'animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4' }),
+          React.createElement('p', { className: 'text-gray-600 dark:text-gray-400' }, 'Loading sessions...')
+        )
+      );
+    }
+
+    if (error) {
+      return React.createElement('div', { className: 'layout-centered container-elevated p-6' },
+        React.createElement('div', { className: 'text-center' },
+          React.createElement('p', { className: 'text-red-600 dark:text-red-400 mb-4' }, error),
+          React.createElement('button', {
+            onClick: loadSessions,
+            className: 'btn btn-primary'
+          }, 'Retry')
+        )
+      );
+    }
+
+    return React.createElement('div', { className: 'layout-centered container-elevated p-6' },
+      sessions.length > 0 ?
+        React.createElement('div', null,
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-white mb-4' }, 'Choose Your Session'),
+          React.createElement('p', { className: 'text-gray-600 dark:text-gray-400 mb-6' }, 'Select an existing session to continue'),
+
+          React.createElement('div', { className: 'space-y-3 mb-6' },
+            sessions.slice(0, 5).map((session) =>
+              React.createElement('button', {
+                key: session.sessionId,
+                onClick: () => handleSessionSelect(session.sessionId),
+                className: 'w-full p-4 text-left border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'
+              },
+                React.createElement('div', { className: 'flex items-center space-x-3' },
+                  React.createElement('div', { className: 'w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium' },
+                    session.userInfo?.firstName?.charAt(0) || '?'
+                  ),
+                  React.createElement('div', { className: 'flex-1' },
+                    React.createElement('div', { className: 'font-medium text-gray-900 dark:text-white' },
+                      `${session.userInfo?.firstName || 'Unknown'} ${session.userInfo?.lastName || ''}`
+                    ),
+                    React.createElement('div', { className: 'text-sm text-gray-500 dark:text-gray-400 truncate max-w-full overflow-hidden' },
+                      session.phoneNumber + (session.userInfo?.username ? ` • @${session.userInfo.username}` : '')
+                    ),
+                    React.createElement('div', { className: 'text-xs text-gray-400 dark:text-gray-500' },
+                      `Last active: ${formatDate(session.lastActive)}`
+                    )
+                  )
+                )
+              )
+            )
+          ),
+
+          sessions.length > 5 && React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' },
+            `Showing 5 of ${sessions.length} sessions`
+          ),
+
+          React.createElement('div', { className: 'text-center' },
+            React.createElement('a', {
+              href: '/login',
+              className: 'px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm inline-block',
+              'data-astro-prefetch': 'hover'
+            }, 'Create New Session')
+          )
+        ) :
+        React.createElement('div', { className: 'text-center' },
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-white mb-4' }, 'Welcome to Telegram Client'),
+          React.createElement('p', { className: 'text-gray-600 dark:text-gray-400 mb-6' },
+            'No active sessions found. Create a new session to get started.'
+          ),
+          React.createElement('a', {
+            href: '/login',
+            className: 'px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm inline-block',
+            'data-astro-prefetch': 'hover'
+          }, 'Create New Session')
+        )
+    );
+  }
+
+  // Initialize React app
+  document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('session-selector-app');
+    if (container) {
+      const root = createRoot(container);
+      root.render(React.createElement(SessionSelector));
+    }
+  });
+</script>

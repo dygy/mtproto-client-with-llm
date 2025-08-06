@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend Session Detection</title>
+</head>
+<body>
+    <script>
+        // Clear localStorage to simulate fresh user
+        localStorage.clear();
+
+        // Test the API call directly
+        fetch('http://localhost:3001/api/sessions')
+            .then(response => response.json())
+            .catch(error => {
+                console.error('❌ API Error:', error);
+            });
+    </script>
+</body>
+</html>

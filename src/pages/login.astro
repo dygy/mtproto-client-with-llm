@@ -1,0 +1,182 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Login - Telegram">
+  <div class="min-h-[calc(100vh-200px)] flex items-center justify-center">
+    <!-- React login component will handle all content -->
+    <div id="login-app"></div>
+  </div>
+</Layout>
+
+<script>
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+
+  // Login React Component
+  function LoginApp() {
+    const [step, setStep] = React.useState('phone'); // 'phone' or 'code'
+    const [phoneNumber, setPhoneNumber] = React.useState('');
+    const [code, setCode] = React.useState('');
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+    const [phoneCodeHash, setPhoneCodeHash] = React.useState('');
+    const [sessionId, setSessionId] = React.useState('');
+
+    const handleSendCode = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/auth/send-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phoneNumber: phoneNumber
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setPhoneCodeHash(data.phoneCodeHash);
+          setSessionId(data.sessionId);
+          setStep('code');
+        } else {
+          setError(data.message || 'Failed to send verification code');
+        }
+      } catch (err) {
+        setError('Failed to send verification code');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleVerifyCode = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/auth/verify-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phoneNumber: phoneNumber,
+            code: code,
+            phoneCodeHash: phoneCodeHash,
+            sessionId: sessionId
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Store session info
+          localStorage.setItem('telegram_session_id', data.sessionId);
+          localStorage.setItem('telegram_user_info', JSON.stringify(data.userInfo));
+
+          // Redirect to chat
+          window.location.href = `/chat?session=${data.sessionId}`;
+        } else {
+          setError(data.message || 'Invalid verification code');
+        }
+      } catch (err) {
+        setError('Failed to verify code');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleBack = () => {
+      setStep('phone');
+      setCode('');
+      setError(null);
+    };
+
+    return React.createElement('div', { className: 'layout-centered container-elevated p-6' },
+      React.createElement('div', { className: 'text-center mb-6' },
+        React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-white mb-4' }, 'Create New Session'),
+        React.createElement('p', { className: 'text-gray-600 dark:text-gray-400' },
+          step === 'phone' ? 'Enter your phone number to start a new Telegram session' : 'Enter the verification code sent to your phone'
+        )
+      ),
+
+      step === 'phone' ?
+        React.createElement('form', { onSubmit: handleSendCode, className: 'space-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'phone', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Phone Number'),
+            React.createElement('input', {
+              type: 'tel',
+              id: 'phone',
+              value: phoneNumber,
+              onChange: (e) => setPhoneNumber(e.target.value),
+              placeholder: '+1234567890',
+              className: 'input',
+              required: true,
+              disabled: loading
+            })
+          ),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'w-full btn btn-primary',
+            disabled: loading
+          }, loading ? 'Sending...' : 'Send Verification Code')
+        ) :
+        React.createElement('form', { onSubmit: handleVerifyCode, className: 'space-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'code', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Verification Code'),
+            React.createElement('input', {
+              type: 'text',
+              id: 'code',
+              value: code,
+              onChange: (e) => setCode(e.target.value),
+              placeholder: '12345',
+              className: 'input',
+              required: true,
+              disabled: loading,
+              autoFocus: true
+            })
+          ),
+          React.createElement('div', { className: 'flex space-x-3' },
+            React.createElement('button', {
+              type: 'button',
+              onClick: handleBack,
+              className: 'flex-1 btn btn-secondary',
+              disabled: loading
+            }, 'Back'),
+            React.createElement('button', {
+              type: 'submit',
+              className: 'flex-1 btn btn-primary',
+              disabled: loading
+            }, loading ? 'Verifying...' : 'Verify Code')
+          )
+        ),
+
+      error && React.createElement('div', { className: 'mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md' },
+        React.createElement('p', { className: 'text-red-700 dark:text-red-400 text-sm' }, error)
+      ),
+
+      React.createElement('div', { className: 'text-center mt-6' },
+        React.createElement('a', {
+          href: '/',
+          className: 'text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+        }, '← Back to session selection')
+      )
+    );
+  }
+
+  // Initialize React app
+  document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('login-app');
+    if (container) {
+      const root = createRoot(container);
+      root.render(React.createElement(LoginApp));
+    }
+  });
+</script>

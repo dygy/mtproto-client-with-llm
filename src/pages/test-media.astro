@@ -1,0 +1,60 @@
+---
+// Test page for media API
+---
+
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Media API Test</title>
+</head>
+<body>
+    <h1>Media API Test</h1>
+    
+    <div>
+        <h2>Test Media Endpoints</h2>
+        <button onclick="testMediaAPI()">Test Media API</button>
+        <button onclick="testMediaTest()">Test Media Test Endpoint</button>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function testMediaAPI() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing media API...';
+            
+            try {
+                // Test with sample parameters
+                const response = await fetch('/api/media/session_1754146954230_t5s8eo3rb/1721294728/6086?thumbnail=true');
+                const data = await response.text();
+                
+                results.innerHTML = `
+                    <h3>Media API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <p>Response: ${data}</p>
+                `;
+            } catch (error) {
+                results.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function testMediaTest() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing media test endpoint...';
+            
+            try {
+                const response = await fetch('/api/media/test');
+                const data = await response.json();
+                
+                results.innerHTML = `
+                    <h3>Media Test Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                results.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+---
+import ChatLayout from '../layouts/ChatLayout.astro';
+import ChatApp from '../components/ChatApp.tsx';
+import { getSession } from '../lib/session-store.js';
+import { setupUpdateHandlers } from '../lib/update-manager.js';
+
+// Simple validation - redirect if no session
+const url = new URL(Astro.request.url);
+const sessionId = url.searchParams.get('session');
+
+if (!sessionId) {
+  return Astro.redirect('/');
+}
+
+// Ensure update handlers are set up for authenticated sessions
+try {
+  const sessionData = await getSession(sessionId);
+  if (sessionData && sessionData.isAuthenticated) {
+    console.log(`🔧 Setting up update handlers for chat page access - Session: ${sessionId}`);
+    await setupUpdateHandlers(sessionId);
+    console.log(`✅ Update handlers ready for session: ${sessionId}`);
+  } else {
+    console.log(`⚠️ Session ${sessionId} not authenticated, skipping update handler setup`);
+  }
+} catch (error) {
+  console.error(`❌ Error setting up update handlers for session ${sessionId}:`, error);
+}
+---
+
+<ChatLayout title="Telegram Chat">
+  <div class="h-full w-full">
+    <ChatApp client:only="react" sessionId={sessionId} />
+  </div>
+</ChatLayout>

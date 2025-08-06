@@ -1,0 +1,39 @@
+{
+  "name": "mtproto-telegram-client",
+  "version": "1.0.0",
+  "description": "MTProto Telegram client with Astro frontend and Node.js backend",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "start": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/react": "^3.6.2",
+    "@astrojs/tailwind": "^5.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "astro": "^4.15.4",
+    "better-sqlite3": "^12.2.0",
+    "lottie-react": "^2.4.1",
+    "lucide-react": "^0.536.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.10",
+    "telegram": "^2.22.2",
+    "zustand": "^5.0.7"
+  },
+  "devDependencies": {
+    "@astrojs/node": "^8.3.4",
+    "@types/node": "^22.5.0",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
