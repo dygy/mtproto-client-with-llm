@@ -23,7 +23,8 @@ const ChatSettingsSidebar: React.FC<ChatSettingsSidebarProps> = ({
     llmPrompt: '',
     autoReply: false,
     keywords: [],
-    notifications: true
+    notifications: true,
+    customLLMConfig: undefined
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -135,7 +136,8 @@ const ChatSettingsSidebar: React.FC<ChatSettingsSidebarProps> = ({
                   llmModel: settings.llmModel,
                   llmPrompt: settings.llmPrompt,
                   autoReply: settings.autoReply,
-                  keywords: settings.keywords
+                  keywords: settings.keywords,
+                  customLLMConfig: settings.customLLMConfig
                 }}
                 onChange={handleSettingChange}
                 disabled={saving}

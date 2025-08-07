@@ -37,14 +37,19 @@ db.exec(`
     session_id TEXT NOT NULL,
     chat_id TEXT NOT NULL,
     llm_enabled BOOLEAN DEFAULT FALSE,
+    llm_provider TEXT DEFAULT 'openai',
+    llm_model TEXT DEFAULT 'gpt-4o-mini',
     llm_prompt TEXT DEFAULT '',
     auto_reply BOOLEAN DEFAULT FALSE,
     keywords TEXT DEFAULT '',
     notifications BOOLEAN DEFAULT TRUE,
+    custom_llm_config TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(session_id, chat_id)
   );
+
+
 
   CREATE TABLE IF NOT EXISTS llm_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,8 +97,8 @@ const statements = {
   // Chat settings statements
   insertChatSettings: db.prepare(`
     INSERT OR REPLACE INTO chat_settings
-    (session_id, chat_id, llm_enabled, llm_provider, llm_model, llm_prompt, auto_reply, keywords, notifications, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    (session_id, chat_id, llm_enabled, llm_provider, llm_model, llm_prompt, auto_reply, keywords, notifications, custom_llm_config, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   `),
 
   getChatSettings: db.prepare('SELECT * FROM chat_settings WHERE session_id = ? AND chat_id = ?'),
@@ -129,6 +134,27 @@ const statements = {
   `)
 };
 
+// Database migration: Add missing columns to existing chat_settings table
+function addColumnIfNotExists(tableName: string, columnName: string, columnDef: string) {
+  try {
+    // Check if column exists by trying to select it
+    db.prepare(`SELECT ${columnName} FROM ${tableName} LIMIT 1`).get();
+  } catch (error) {
+    // Column doesn't exist, add it
+    try {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef};`);
+      console.log(`✅ Added column ${columnName} to ${tableName}`);
+    } catch (addError) {
+      console.warn(`⚠️ Failed to add column ${columnName} to ${tableName}:`, addError);
+    }
+  }
+}
+
+// Add missing columns
+addColumnIfNotExists('chat_settings', 'llm_provider', "TEXT DEFAULT 'openai'");
+addColumnIfNotExists('chat_settings', 'llm_model', "TEXT DEFAULT 'gpt-4o-mini'");
+addColumnIfNotExists('chat_settings', 'custom_llm_config', 'TEXT DEFAULT NULL');
+
 export interface SessionData {
   client?: any;
   phoneNumber?: string;
@@ -163,6 +189,15 @@ export interface ChatSettings {
   autoReply: boolean;
   keywords: string[];
   notifications: boolean;
+  customLLMConfig?: {
+    baseUrl: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    requestFormat?: 'openai' | 'custom';
+    responseFormat?: 'openai' | 'custom';
+    customRequestTemplate?: string;
+    customResponsePath?: string;
+  };
 }
 
 export interface ChatSettingsRecord {
@@ -176,6 +211,7 @@ export interface ChatSettingsRecord {
   auto_reply: boolean;
   keywords: string;
   notifications: boolean;
+  custom_llm_config: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -346,6 +382,7 @@ export class ChatSettingsStore {
   static async setChatSettings(sessionId: string, chatId: string, settings: ChatSettings): Promise<void> {
     try {
       const keywordsString = settings.keywords.join(',');
+      const customConfigString = settings.customLLMConfig ? JSON.stringify(settings.customLLMConfig) : null;
 
       statements.insertChatSettings.run(
         sessionId,
@@ -356,7 +393,8 @@ export class ChatSettingsStore {
         settings.llmPrompt,
         settings.autoReply ? 1 : 0,
         keywordsString,
-        settings.notifications ? 1 : 0
+        settings.notifications ? 1 : 0,
+        customConfigString
       );
 
       console.log(`💾 Chat settings saved: ${sessionId}/${chatId} (LLM: ${settings.llmEnabled})`);
@@ -383,6 +421,14 @@ export class ChatSettingsStore {
         };
       }
 
+      let customLLMConfig;
+      try {
+        customLLMConfig = record.custom_llm_config ? JSON.parse(record.custom_llm_config) : undefined;
+      } catch (error) {
+        console.warn('Failed to parse custom LLM config:', error);
+        customLLMConfig = undefined;
+      }
+
       const settings: ChatSettings = {
         llmEnabled: Boolean(record.llm_enabled),
         llmProvider: record.llm_provider || 'openai',
@@ -390,7 +436,8 @@ export class ChatSettingsStore {
         llmPrompt: record.llm_prompt,
         autoReply: Boolean(record.auto_reply),
         keywords: record.keywords ? record.keywords.split(',').filter(k => k.trim()) : [],
-        notifications: Boolean(record.notifications)
+        notifications: Boolean(record.notifications),
+        customLLMConfig
       };
 
       return settings;

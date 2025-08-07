@@ -166,10 +166,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
         // Auto-scroll to bottom
         setTimeout(() => scrollToBottom('smooth'), 100);
 
-        // Mark as read if visible
-        if (document.visibilityState === 'visible') {
-          markMessagesAsRead();
-        }
+        // Note: Removed automatic message reading - user must manually mark as read
       } else {
         console.log('⏭️ ChatView: Message is not for current chat, ignoring');
       }
@@ -228,10 +225,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
           }
         }, 100);
 
-        // Mark as read if visible
-        if (document.visibilityState === 'visible') {
-          markMessagesAsRead();
-        }
+        // Note: Removed automatic message reading - user must manually mark as read
       }
     });
 

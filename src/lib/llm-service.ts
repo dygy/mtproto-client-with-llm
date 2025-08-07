@@ -14,6 +14,15 @@ export interface ChatSettings {
   autoReply: boolean;
   keywords: string[];
   notifications: boolean;
+  customLLMConfig?: {
+    baseUrl: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    requestFormat?: 'openai' | 'custom';
+    responseFormat?: 'openai' | 'custom';
+    customRequestTemplate?: string;
+    customResponsePath?: string;
+  };
 }
 
 export interface MessageContext {
@@ -90,6 +99,14 @@ export class LLMService {
       console.log('🔍 Raw settings from DB:', settings);
 
       if (settings) {
+        let customLLMConfig;
+        try {
+          customLLMConfig = settings.custom_llm_config ? JSON.parse(settings.custom_llm_config) : undefined;
+        } catch (error) {
+          console.warn('Failed to parse custom LLM config:', error);
+          customLLMConfig = undefined;
+        }
+
         const chatSettings = {
           llmEnabled: Boolean(settings.llm_enabled),
           llmProvider: settings.llm_provider || 'openai',
@@ -97,7 +114,8 @@ export class LLMService {
           llmPrompt: settings.llm_prompt || '',
           autoReply: Boolean(settings.auto_reply),
           keywords: settings.keywords ? settings.keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k) : [],
-          notifications: Boolean(settings.notifications)
+          notifications: Boolean(settings.notifications),
+          customLLMConfig
         };
         console.log('🔍 Processed chat settings:', chatSettings);
         return chatSettings;
@@ -205,7 +223,7 @@ export class LLMService {
         return {
           success: true,
           response: existingResult.llm_response || '',
-          shouldReply: settings.autoReply,
+          shouldReply: false, // Don't auto-reply for existing results to prevent duplicates
           processingTime: existingResult.processing_time_ms || 0,
           provider: existingResult.llm_provider || 'unknown',
           model: existingResult.llm_model || 'unknown'
@@ -217,7 +235,7 @@ export class LLMService {
       console.log(`📝 Built prompt: ${prompt.substring(0, 100)}...`);
 
       // Call the configured LLM provider
-      const llmResponse = await this.callLLMProvider(prompt, settings.llmProvider, settings.llmModel);
+      const llmResponse = await this.callLLMProvider(prompt, settings.llmProvider, settings.llmModel, settings.customLLMConfig);
 
       const processingTime = Date.now() - startTime;
 
@@ -234,6 +252,28 @@ export class LLMService {
             llmResponse,
             processingTime
           );
+
+          // Broadcast the new result to stream clients
+          try {
+            const { broadcastLLMResult } = await import('../pages/api/llm-results/stream.js');
+            broadcastLLMResult({
+              id: Date.now(), // We don't have the actual DB ID, use timestamp
+              messageId: messageId,
+              chatId: parseInt(context.chatId),
+              sessionId: context.sessionId,
+              userId: parseInt(context.senderId),
+              provider: settings.llmProvider,
+              model: settings.llmModel,
+              response: llmResponse,
+              prompt: prompt,
+              processingTime: processingTime,
+              chatTitle: context.chat,
+              createdAt: new Date().toISOString()
+            });
+          } catch (broadcastError) {
+            console.warn('⚠️ Failed to broadcast LLM result:', broadcastError);
+            // Don't fail the main process if broadcast fails
+          }
         }
       } catch (saveError) {
         console.error('❌ Error saving LLM result to database:', saveError);
@@ -272,10 +312,18 @@ export class LLMService {
     }
   }
 
-  private async callLLMProvider(prompt: string, provider: string, model: string): Promise<string> {
+  private async callLLMProvider(prompt: string, provider: string, model: string, customConfig?: any): Promise<string> {
     try {
-      // Get the provider instance
-      const llmProvider = LLMProviderRegistry.getProvider(provider);
+      let llmProvider;
+
+      if (provider === 'custom' && customConfig) {
+        // Create custom provider instance with user configuration
+        const { CustomLLMProvider } = await import('./llm-providers/custom.js');
+        llmProvider = new CustomLLMProvider(customConfig);
+      } else {
+        // Get the standard provider instance
+        llmProvider = LLMProviderRegistry.getProvider(provider);
+      }
 
       if (!llmProvider) {
         throw new Error(`Provider ${provider} is not available or not configured`);

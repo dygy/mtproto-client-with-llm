@@ -26,7 +26,8 @@ const ChatSettingsComponent: React.FC<ChatSettingsProps> = ({
     llmPrompt: '',
     autoReply: false,
     keywords: [],
-    notifications: true
+    notifications: true,
+    customLLMConfig: undefined
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -148,7 +149,8 @@ const ChatSettingsComponent: React.FC<ChatSettingsProps> = ({
                     llmModel: settings.llmModel,
                     llmPrompt: settings.llmPrompt,
                     autoReply: settings.autoReply,
-                    keywords: settings.keywords
+                    keywords: settings.keywords,
+                    customLLMConfig: settings.customLLMConfig
                   }}
                   onChange={handleSettingChange}
                   disabled={saving}

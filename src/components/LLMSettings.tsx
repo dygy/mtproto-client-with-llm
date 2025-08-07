@@ -11,6 +11,7 @@ interface LLMSettingsProps {
     llmPrompt: string;
     autoReply: boolean;
     keywords: string[];
+    customLLMConfig?: any;
   };
   onChange: (key: keyof ChatSettings, value: any) => void;
   disabled?: boolean;
@@ -66,6 +67,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ settings, onChange, disabled 
               selectedModel={settings.llmModel}
               onProviderChange={(provider) => onChange('llmProvider', provider)}
               onModelChange={(model) => onChange('llmModel', model)}
+              customLLMConfig={settings.customLLMConfig}
+              onCustomLLMConfigChange={(config) => onChange('customLLMConfig', config)}
               disabled={disabled}
             />
 

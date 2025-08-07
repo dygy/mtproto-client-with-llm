@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
+import CustomLLMConfig from './CustomLLMConfig';
 
 interface ProviderInfo {
   id: string;
@@ -26,6 +27,8 @@ interface ProviderSelectorProps {
   selectedModel: string;
   onProviderChange: (provider: string) => void;
   onModelChange: (model: string) => void;
+  customLLMConfig?: any;
+  onCustomLLMConfigChange?: (config: any) => void;
   disabled?: boolean;
 }
 
@@ -34,6 +37,8 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
   selectedModel,
   onProviderChange,
   onModelChange,
+  customLLMConfig,
+  onCustomLLMConfigChange,
   disabled = false
 }) => {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -274,6 +279,17 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Custom LLM Configuration */}
+      {selectedProvider === 'custom' && onCustomLLMConfigChange && (
+        <div className="mt-4">
+          <CustomLLMConfig
+            config={customLLMConfig}
+            onChange={onCustomLLMConfigChange}
+            disabled={disabled}
+          />
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { OpenAIProvider } from './openai.js';
 import { ClaudeProvider } from './claude.js';
 import { MistralProvider } from './mistral.js';
 import { GeminiProvider } from './gemini.js';
+import { CustomLLMProvider } from './custom.js';
 
 export interface ProviderInfo {
   id: string;
@@ -12,6 +13,7 @@ export interface ProviderInfo {
   website: string;
   requiresApiKey: boolean;
   envKeyName: string;
+  isCustom?: boolean;
 }
 
 export class LLMProviderRegistry {
@@ -24,6 +26,7 @@ export class LLMProviderRegistry {
     this.providers.set('claude', ClaudeProvider as any);
     this.providers.set('mistral', MistralProvider as any);
     this.providers.set('gemini', GeminiProvider as any);
+    this.providers.set('custom', CustomLLMProvider as any);
   }
 
   static getProviderInfo(): ProviderInfo[] {
@@ -59,31 +62,51 @@ export class LLMProviderRegistry {
         website: 'https://ai.google.dev',
         requiresApiKey: true,
         envKeyName: 'GEMINI_API_KEY'
+      },
+      {
+        id: 'custom',
+        name: 'Custom LLM',
+        description: 'User-configured custom LLM endpoint',
+        website: '',
+        requiresApiKey: false,
+        envKeyName: '',
+        isCustom: true
       }
     ];
   }
 
   static getAvailableProviders(): string[] {
     const availableProviders: string[] = [];
-    
+
     for (const [providerId, _] of this.providers) {
       if (this.isProviderConfigured(providerId)) {
         availableProviders.push(providerId);
       }
     }
-    
+
     return availableProviders;
   }
 
   static isProviderConfigured(providerId: string): boolean {
     const providerInfo = this.getProviderInfo().find(p => p.id === providerId);
     if (!providerInfo) return false;
-    
+
+    // Custom provider doesn't require environment variables
+    if (providerInfo.isCustom) {
+      return true;
+    }
+
     const apiKey = process.env[providerInfo.envKeyName];
     return Boolean(apiKey && apiKey.trim());
   }
 
   static getProvider(providerId: string): BaseLLMProvider | null {
+    // Custom provider is handled differently - don't cache it since each instance has different config
+    if (providerId === 'custom') {
+      console.warn('⚠️ Custom provider should be instantiated directly with user config, not through registry');
+      return null;
+    }
+
     // Return cached instance if available
     if (this.instances.has(providerId)) {
       return this.instances.get(providerId)!;
@@ -117,7 +140,7 @@ export class LLMProviderRegistry {
       // Create and cache provider instance
       const provider = new (ProviderClass as any)(config);
       this.instances.set(providerId, provider);
-      
+
       console.log(`✅ Initialized ${providerId} provider`);
       return provider;
 
@@ -129,26 +152,62 @@ export class LLMProviderRegistry {
 
   static getAllModels(): { provider: string; models: ModelInfo[] }[] {
     const result: { provider: string; models: ModelInfo[] }[] = [];
-    
+
     for (const providerId of this.getAvailableProviders()) {
-      const provider = this.getProvider(providerId);
-      if (provider) {
+      if (providerId === 'custom') {
+        // For custom provider, return default models without instantiating
         result.push({
           provider: providerId,
-          models: provider.getAvailableModels()
+          models: [
+            {
+              id: 'custom-model',
+              name: 'Custom Model',
+              description: 'User-configured custom LLM model',
+              contextLength: 4096,
+              inputCostPer1k: 0,
+              outputCostPer1k: 0,
+              supportsStreaming: false
+            }
+          ]
         });
+      } else {
+        const provider = this.getProvider(providerId);
+        if (provider) {
+          result.push({
+            provider: providerId,
+            models: provider.getAvailableModels()
+          });
+        }
       }
     }
-    
+
     return result;
   }
 
   static getModelsByProvider(providerId: string): ModelInfo[] {
+    if (providerId === 'custom') {
+      return [
+        {
+          id: 'custom-model',
+          name: 'Custom Model',
+          description: 'User-configured custom LLM model',
+          contextLength: 4096,
+          inputCostPer1k: 0,
+          outputCostPer1k: 0,
+          supportsStreaming: false
+        }
+      ];
+    }
+
     const provider = this.getProvider(providerId);
     return provider ? provider.getAvailableModels() : [];
   }
 
   static isModelSupported(providerId: string, modelId: string): boolean {
+    if (providerId === 'custom') {
+      return modelId === 'custom-model';
+    }
+
     const provider = this.getProvider(providerId);
     return provider ? provider.isModelSupported(modelId) : false;
   }
@@ -156,20 +215,21 @@ export class LLMProviderRegistry {
   static getDefaultModel(providerId: string): string | null {
     const models = this.getModelsByProvider(providerId);
     if (models.length === 0) return null;
-    
+
     // Return the first model as default, or a specific preferred model
     const preferredModels: Record<string, string> = {
       'openai': 'gpt-4o-mini',
       'claude': 'claude-3-5-haiku-20241022',
       'mistral': 'mistral-small-latest',
-      'gemini': 'gemini-1.5-flash'
+      'gemini': 'gemini-1.5-flash',
+      'custom': 'custom-model'
     };
-    
+
     const preferred = preferredModels[providerId];
     if (preferred && models.some(m => m.id === preferred)) {
       return preferred;
     }
-    
+
     return models[0].id;
   }
 

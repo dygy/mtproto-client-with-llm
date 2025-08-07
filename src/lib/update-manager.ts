@@ -49,6 +49,15 @@ interface SSEClient {
 // Store SSE clients
 const sseClients = new Map<string, SSEClient[]>();
 
+// Auto-reply cache to prevent duplicate replies
+const autoReplyCache = new Map<string, boolean>();
+
+// Clean up auto-reply cache every 10 minutes to prevent memory leaks
+setInterval(() => {
+  autoReplyCache.clear();
+  console.log('🧹 Auto-reply cache cleared');
+}, 10 * 60 * 1000);
+
 // Add SSE client for a session
 export function addSSEClient(sessionId: string, controller: ReadableStreamDefaultController): SSEClient {
   if (!sseClients.has(sessionId)) {
@@ -84,6 +93,75 @@ export function removeSSEClient(sessionId: string, controller: ReadableStreamDef
         sseClients.delete(sessionId);
       }
     }
+  }
+}
+
+// Send auto-reply message to a chat
+async function sendAutoReply(sessionId: string, chatId: number, message: string, replyToMsgId?: number): Promise<void> {
+  const sessionData = await getSession(sessionId);
+  if (!sessionData || !sessionData.client || !sessionData.isAuthenticated) {
+    throw new Error('Session not found or not authenticated');
+  }
+
+  const { client } = sessionData;
+
+  try {
+    // Ensure client is connected
+    if (!client.connected) {
+      await client.connect();
+    }
+
+    // Get the chat entity
+    let entity;
+    try {
+      entity = await client.getEntity(chatId);
+    } catch (error) {
+      console.warn(`⚠️ Direct entity lookup failed for ${chatId}, trying alternatives:`, error);
+
+      // Try to find in dialogs
+      const dialogs = await client.getDialogs({ limit: 100 });
+      const targetDialog = dialogs.find((dialog: any) => {
+        const dialogChatId = dialog.entity?.id ? Number(dialog.entity.id) : 0;
+        return dialogChatId === chatId;
+      });
+
+      if (!targetDialog) {
+        throw new Error(`Chat ${chatId} not found in dialogs`);
+      }
+      entity = targetDialog.entity;
+    }
+
+    // Send the message
+    const { Api } = await import('telegram');
+    const sentMessage = await client.sendMessage(entity, {
+      message: message,
+      replyTo: replyToMsgId
+    });
+
+    console.log(`✅ Auto-reply sent to chat ${chatId}: "${message.substring(0, 50)}..."`);
+
+    // Broadcast the sent message to frontend
+    const messageResponse = {
+      id: sentMessage.id,
+      text: message,
+      date: new Date().toISOString(),
+      fromId: sessionData.userInfo?.id,
+      fromName: sessionData.userInfo?.firstName || 'You',
+      chatId: chatId,
+      isOutgoing: true,
+      replyToMsgId: replyToMsgId || undefined,
+      isAutoReply: true
+    };
+
+    broadcastToSession(sessionId, {
+      type: 'message',
+      data: messageResponse,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error(`❌ Error sending auto-reply to chat ${chatId}:`, error);
+    throw error;
   }
 }
 
@@ -361,24 +439,25 @@ async function handleUpdate(sessionId: string, update: MTProtoUpdate): Promise<v
       timestamp: new Date().toISOString()
     });
 
-    // Process message with LLM if enabled for this chat
-    try {
-      console.log('🤖 Starting LLM processing for chat:', telegramMessage.chatId);
+    // Process message with LLM if enabled for this chat (only for incoming messages)
+    if (!telegramMessage.isOutgoing) {
+      try {
+        console.log('🤖 Starting LLM processing for incoming message in chat:', telegramMessage.chatId);
 
-      const messageContext: any = {
-        sessionId,
-        chatId: telegramMessage.chatId.toString(),
-        messageId: telegramMessage.id.toString(),
-        message: messageText,
-        sender: telegramMessage.fromName || 'Unknown',
-        chat: telegramMessage.chatTitle || 'Unknown',
-        senderId: telegramMessage.fromId?.toString() || 'unknown',
-        timestamp: Math.floor(new Date(telegramMessage.date).getTime() / 1000)
-      };
+        const messageContext: any = {
+          sessionId,
+          chatId: telegramMessage.chatId.toString(),
+          messageId: telegramMessage.id.toString(),
+          message: messageText,
+          sender: telegramMessage.fromName || 'Unknown',
+          chat: telegramMessage.chatTitle || 'Unknown',
+          senderId: telegramMessage.fromId?.toString() || 'unknown',
+          timestamp: Math.floor(new Date(telegramMessage.date).getTime() / 1000)
+        };
 
-      console.log('🤖 LLM context:', messageContext);
-      const llmResult = await llmService.processMessage(messageContext);
-      console.log('🤖 LLM processing completed:', { success: llmResult.success, error: llmResult.error });
+        console.log('🤖 LLM context:', messageContext);
+        const llmResult = await llmService.processMessage(messageContext);
+        console.log('🤖 LLM processing completed:', { success: llmResult.success, error: llmResult.error });
 
       if (llmResult.success) {
 
@@ -398,9 +477,38 @@ async function handleUpdate(sessionId: string, update: MTProtoUpdate): Promise<v
           timestamp: new Date().toISOString()
         });
 
+        // Auto-reply if enabled and this is not an outgoing message
+        if (llmResult.shouldReply && !telegramMessage.isOutgoing && llmResult.response) {
+          try {
+            console.log('🤖 Auto-reply enabled, checking if already replied to message:', telegramMessage.id);
+
+            // Check if we already sent an auto-reply for this message
+            const replyKey = `auto_reply_${sessionId}_${telegramMessage.chatId}_${telegramMessage.id}`;
+
+            if (!autoReplyCache.has(replyKey)) {
+              console.log('🤖 Sending LLM response back to chat:', telegramMessage.chatId);
+
+              // Mark this message as having an auto-reply sent
+              autoReplyCache.set(replyKey, true);
+
+              // Send the LLM response back to the chat
+              await sendAutoReply(sessionId, telegramMessage.chatId, llmResult.response, telegramMessage.id);
+
+              console.log('✅ Auto-reply sent successfully');
+            } else {
+              console.log('⏭️ Auto-reply already sent for this message, skipping');
+            }
+          } catch (autoReplyError) {
+            console.error('❌ Error sending auto-reply:', autoReplyError);
+          }
+        }
+
       }
-    } catch (llmError) {
-      console.error('Error in LLM processing:', llmError);
+      } catch (llmError) {
+        console.error('Error in LLM processing:', llmError);
+      }
+    } else {
+      console.log('⏭️ Skipping LLM processing for outgoing message');
     }
 
   } catch (error) {

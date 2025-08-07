@@ -6,12 +6,13 @@ export interface ChatSettingsRow {
   session_id: string;
   chat_id: string;
   llm_enabled: number; // SQLite stores booleans as integers
-  llm_provider: string; // LLM provider (openai, claude, mistral, gemini)
+  llm_provider: string; // LLM provider (openai, claude, mistral, gemini, custom)
   llm_model: string; // Specific model name
   llm_prompt: string;
   auto_reply: number; // SQLite stores booleans as integers
   keywords: string;
   notifications: number; // SQLite stores booleans as integers
+  custom_llm_config: string; // JSON string for custom LLM configuration
   created_at: string;
   updated_at: string;
 }

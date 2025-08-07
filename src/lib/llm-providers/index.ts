@@ -6,6 +6,7 @@ export { OpenAIProvider } from './openai.js';
 export { ClaudeProvider } from './claude.js';
 export { MistralProvider } from './mistral.js';
 export { GeminiProvider } from './gemini.js';
+export { CustomLLMProvider } from './custom.js';
 export { LLMProviderRegistry } from './registry.js';
 
 // Import for convenience functions
