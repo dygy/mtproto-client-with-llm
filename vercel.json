@@ -1,13 +1,5 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "astro",
-  "installCommand": "npm install",
-  "devCommand": "npm run dev",
-  "functions": {
-    "**/*.func/**": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  "framework": "astro"
 }
 

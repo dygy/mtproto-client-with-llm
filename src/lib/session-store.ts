@@ -1,5 +1,6 @@
 // @ts-nocheck
-import SessionStore, { type SessionData } from './database';
+import StorageAdapter from './storage-adapter';
+import type { SessionData } from './blob-storage';
 import { TELEGRAM_API_ID, TELEGRAM_API_HASH } from './env.js';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
@@ -10,10 +11,10 @@ export type { SessionData };
 // Global session store for active clients (in-memory cache)
 const sessions = new Map<string, SessionData>();
 
-// Load session from database and recreate client if needed
-async function loadSessionFromDatabase(sessionId: string): Promise<SessionData | null> {
+// Load session from storage and recreate client if needed
+async function loadSessionFromStorage(sessionId: string): Promise<SessionData | null> {
   try {
-    const sessionData = await SessionStore.getSession(sessionId);
+    const sessionData = await StorageAdapter.getSession(sessionId);
     if (!sessionData) {
       return null;
     }
@@ -92,24 +93,24 @@ export async function setSession(sessionId: string, data: SessionData) {
     expires: data.expires
   };
 
-  // Save to SQLite database
-  await SessionStore.setSession(sessionId, dbData);
+  // Save to storage (Vercel Blob or SQLite)
+  await StorageAdapter.setSession(sessionId, dbData);
 }
 
 export async function getSession(sessionId: string): Promise<SessionData | undefined> {
   // First check in-memory cache
   let session = sessions.get(sessionId);
 
-  // If not in memory, try to load from database
+  // If not in memory, try to load from storage
   if (!session) {
-    console.log(`📀 Loading session ${sessionId} from SQLite database...`);
-    const dbSession = await loadSessionFromDatabase(sessionId);
-    if (dbSession) {
-      console.log(`✅ Session ${sessionId} loaded from database, adding to memory cache`);
-      sessions.set(sessionId, dbSession);
-      session = dbSession;
+    console.log(`📀 Loading session ${sessionId} from storage...`);
+    const storageSession = await loadSessionFromStorage(sessionId);
+    if (storageSession) {
+      console.log(`✅ Session ${sessionId} loaded from storage, adding to memory cache`);
+      sessions.set(sessionId, storageSession);
+      session = storageSession;
     } else {
-      console.log(`❌ Session ${sessionId} not found in database`);
+      console.log(`❌ Session ${sessionId} not found in storage`);
     }
   }
   return session;
@@ -119,10 +120,10 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
   // Remove from memory cache
   const memoryDeleted = sessions.delete(sessionId);
 
-  // Remove from database
-  const dbDeleted = await SessionStore.deleteSession(sessionId);
+  // Remove from storage
+  const storageDeleted = await StorageAdapter.deleteSession(sessionId);
 
-  return memoryDeleted || dbDeleted;
+  return memoryDeleted || storageDeleted;
 }
 
 export async function hasSession(sessionId: string): Promise<boolean> {
@@ -131,9 +132,9 @@ export async function hasSession(sessionId: string): Promise<boolean> {
     return true;
   }
 
-  // Check database
-  const dbSession = await SessionStore.getSession(sessionId);
-  return dbSession !== null;
+  // Check storage
+  const storageSession = await StorageAdapter.getSession(sessionId);
+  return storageSession !== null;
 }
 
 export async function getAllSessions(): Promise<Map<string, SessionData>> {

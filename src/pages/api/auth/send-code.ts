@@ -16,7 +16,7 @@ if (!API_ID || !API_HASH) {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const { phoneNumber } = await request.json();
-    
+
     if (!phoneNumber) {
       return new Response(JSON.stringify({
         success: false,
@@ -85,7 +85,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   } catch (error) {
     console.error('Error sending code:', error);
-    
+
     return new Response(JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to send verification code'

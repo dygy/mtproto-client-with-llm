@@ -4,7 +4,7 @@ import { ChatSettingsStore } from '../../../../lib/database.js';
 
 export const GET: APIRoute = async ({ params }) => {
   const { sessionId } = params;
-  
+
   if (!sessionId) {
     return new Response(JSON.stringify({
       success: false,
@@ -16,20 +16,8 @@ export const GET: APIRoute = async ({ params }) => {
   }
 
   try {
-    // Get all chat settings for this session
-    const Database = (await import('better-sqlite3')).default;
-    const path = await import('path');
-    const dbPath = path.default.join(process.cwd(), 'data', 'sessions.db');
-    const db = new Database(dbPath);
-
-    const stmt = db.prepare(`
-      SELECT * FROM chat_settings 
-      WHERE session_id = ?
-      ORDER BY chat_id
-    `);
-    
-    const settings = stmt.all(sessionId);
-    db.close();
+    // Get all chat settings for this session from Blob storage
+    const settings = await ChatSettingsStore.listChatSettings(sessionId);
 
     return new Response(JSON.stringify({
       success: true,

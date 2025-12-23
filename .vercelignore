@@ -4,6 +4,13 @@ node_modules
 .env.local
 data/
 sessions/
+*.db
+*.db-shm
+*.db-wal
 *.log
 .DS_Store
+README.md
+VERCEL_DEPLOYMENT.md
+VERCEL_BLOB_SETUP.md
+DEPLOYMENT_SUMMARY.md
 

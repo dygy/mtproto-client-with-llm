@@ -16,9 +16,15 @@ dist/
 .env.test.local
 .env.production.local
 
-# Session files (contains sensitive data)
+# Session files (contains sensitive data) - Legacy, now using Vercel Blob
 sessions/
 *.session
+
+# SQLite database files - Legacy, now using Vercel Blob
+data/
+*.db
+*.db-shm
+*.db-wal
 
 # Logs
 logs

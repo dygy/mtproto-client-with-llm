@@ -17,6 +17,10 @@ import Layout from '../layouts/Layout.astro';
     const [sessions, setSessions] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
+    const [selectedSession, setSelectedSession] = React.useState(null);
+    const [sessionPassword, setSessionPassword] = React.useState('');
+    const [passwordError, setPasswordError] = React.useState('');
+    const [verifying, setVerifying] = React.useState(false);
 
     React.useEffect(() => {
       loadSessions();
@@ -27,7 +31,7 @@ import Layout from '../layouts/Layout.astro';
         setLoading(true);
         const response = await fetch('/api/sessions');
         const data = await response.json();
-        
+
         if (data.success) {
           setSessions(data.sessions || []);
         } else {
@@ -42,38 +46,61 @@ import Layout from '../layouts/Layout.astro';
     };
 
     const handleSessionSelect = async (sessionId) => {
+      // Check if we already have unlock token for this session
+      const unlockToken = localStorage.getItem(`session_unlock_${sessionId}`);
+
+      if (unlockToken) {
+        // Already unlocked, go directly to chat
+        window.location.href = `/chat?session=${sessionId}`;
+      } else {
+        // Need password, show password prompt
+        setSelectedSession(sessionId);
+        setSessionPassword('');
+        setPasswordError('');
+      }
+    };
+
+    const handlePasswordSubmit = async (e) => {
+      e.preventDefault();
+      setVerifying(true);
+      setPasswordError('');
+
       try {
-        const response = await fetch('/api/restore-session', {
+        const response = await fetch('/api/auth/verify-session-password', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
           },
-          body: `sessionId=${sessionId}`
+          body: JSON.stringify({
+            sessionId: selectedSession,
+            password: sessionPassword
+          })
         });
 
-        if (response.redirected) {
-          // Use smooth navigation with View Transitions
-          if ('startViewTransition' in document) {
-            document.startViewTransition(() => {
-              window.location.href = response.url;
-            });
-          } else {
-            window.location.href = response.url;
-          }
-        } else if (response.ok) {
-          // Use smooth navigation with View Transitions
-          const chatUrl = `/chat?session=${sessionId}`;
-          if ('startViewTransition' in document) {
-            document.startViewTransition(() => {
-              window.location.href = chatUrl;
-            });
-          } else {
-            window.location.href = chatUrl;
-          }
+        const data = await response.json();
+
+        if (data.success) {
+          // Store unlock token
+          localStorage.setItem(`session_unlock_${selectedSession}`, sessionPassword);
+
+          // Redirect to chat
+          window.location.href = `/chat?session=${selectedSession}`;
+        } else {
+          setPasswordError(data.message || 'Invalid password');
+          setSessionPassword('');
         }
       } catch (err) {
-        console.error('Error restoring session:', err);
+        setPasswordError('Failed to verify password');
+        setSessionPassword('');
+      } finally {
+        setVerifying(false);
       }
+    };
+
+    const handleCancelPassword = () => {
+      setSelectedSession(null);
+      setSessionPassword('');
+      setPasswordError('');
     };
 
     const formatDate = (dateString) => {
@@ -101,6 +128,54 @@ import Layout from '../layouts/Layout.astro';
             onClick: loadSessions,
             className: 'btn btn-primary'
           }, 'Retry')
+        )
+      );
+    }
+
+    // Show password prompt if session is selected
+    if (selectedSession) {
+      return React.createElement('div', { className: 'layout-centered container-elevated p-6' },
+        React.createElement('div', { className: 'text-center mb-6' },
+          React.createElement('div', { className: 'text-5xl mb-4' }, '🔒'),
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-white mb-2' }, 'Session Password Required'),
+          React.createElement('p', { className: 'text-gray-600 dark:text-gray-400' },
+            'Enter the password for this session'
+          )
+        ),
+
+        React.createElement('form', { onSubmit: handlePasswordSubmit, className: 'space-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'session-password', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Password'),
+            React.createElement('input', {
+              type: 'password',
+              id: 'session-password',
+              value: sessionPassword,
+              onChange: (e) => setSessionPassword(e.target.value),
+              placeholder: 'Enter session password',
+              className: 'input',
+              required: true,
+              disabled: verifying,
+              autoFocus: true
+            })
+          ),
+
+          passwordError && React.createElement('div', { className: 'p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md' },
+            React.createElement('p', { className: 'text-red-700 dark:text-red-400 text-sm' }, passwordError)
+          ),
+
+          React.createElement('div', { className: 'flex space-x-3' },
+            React.createElement('button', {
+              type: 'button',
+              onClick: handleCancelPassword,
+              className: 'flex-1 btn btn-secondary',
+              disabled: verifying
+            }, 'Cancel'),
+            React.createElement('button', {
+              type: 'submit',
+              className: 'flex-1 btn btn-primary',
+              disabled: verifying || !sessionPassword
+            }, verifying ? 'Verifying...' : 'Unlock')
+          )
         )
       );
     }
@@ -165,11 +240,26 @@ import Layout from '../layouts/Layout.astro';
   }
 
   // Initialize React app
-  document.addEventListener('DOMContentLoaded', () => {
+  function initSessionSelector() {
     const container = document.getElementById('session-selector-app');
-    if (container) {
+    if (container && !container.hasAttribute('data-initialized')) {
+      container.setAttribute('data-initialized', 'true');
       const root = createRoot(container);
       root.render(React.createElement(SessionSelector));
     }
-  });
+  }
+
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', initSessionSelector);
+
+  // Re-initialize after View Transitions navigation
+  document.addEventListener('astro:page-load', initSessionSelector);
+
+  // Also try immediate initialization in case script loads after DOM
+  if (document.readyState === 'loading') {
+    // DOM is still loading
+  } else {
+    // DOM is already ready
+    initSessionSelector();
+  }
 </script>

@@ -1,52 +1,38 @@
 // @ts-nocheck
 import type { APIRoute } from 'astro';
+import { StorageAdapter } from '../../lib/storage-adapter.js';
 
 export const GET: APIRoute = async () => {
   try {
-    console.log('📋 Listing all available sessions from database...');
-
-    // We need to create a new method to get full session data
-    // For now, let's use a direct database query
-    const Database = (await import('better-sqlite3')).default;
-    const path = (await import('path')).default;
-
-    const DB_PATH = path.join(process.cwd(), 'data', 'sessions.db');
-    const db = new Database(DB_PATH);
+    console.log('📋 Listing all available sessions from Blob storage...');
 
     try {
-      // Get all authenticated sessions with full data
-      const records = db.prepare(`
-        SELECT id, data, created_at, updated_at, phone_number
-        FROM sessions
-        WHERE is_authenticated = TRUE
-        ORDER BY updated_at DESC
-      `).all() as any[];
+      // Get all authenticated sessions
+      const records = await StorageAdapter.listSessions();
 
       // Filter and format the response
       const availableSessions = records
         .map(record => {
           try {
-            const sessionData = JSON.parse(record.data);
-
             // Only return sessions with user info
-            if (sessionData.userInfo) {
+            if (record.user_id) {
               return {
                 sessionId: record.id,
-                phoneNumber: record.phone_number || sessionData.phoneNumber,
-                userInfo: sessionData.userInfo,
+                phoneNumber: record.phone_number,
+                userInfo: {
+                  id: record.user_id
+                },
                 lastActive: record.updated_at,
                 createdAt: record.created_at
               };
             }
             return null;
           } catch (error) {
-            console.error(`❌ Error parsing session data for ${record.id}:`, error);
+            console.error(`❌ Error processing session ${record.id}:`, error);
             return null;
           }
         })
         .filter(session => session !== null);
-
-      db.close();
 
       console.log(`✅ Found ${availableSessions.length} authenticated sessions`);
 
@@ -61,9 +47,8 @@ export const GET: APIRoute = async () => {
         },
       });
 
-    } catch (dbError) {
-      db.close();
-      throw dbError;
+    } catch (storageError) {
+      throw storageError;
     }
 
   } catch (error) {
