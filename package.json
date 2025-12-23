@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/fix-vercel-runtime.js",
     "preview": "astro preview",
     "start": "astro preview --host 0.0.0.0 --port ${PORT:-4000}"
   },
