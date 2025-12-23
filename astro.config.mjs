@@ -14,7 +14,9 @@ export default defineConfig({
   adapter: vercel({
     webAnalytics: {
       enabled: true
-    }
+    },
+    functionPerRoute: false,
+    runtime: 'nodejs20.x'
   }),
   prefetch: {
     prefetchAll: true,
