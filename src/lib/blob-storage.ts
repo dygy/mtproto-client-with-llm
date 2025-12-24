@@ -3,6 +3,7 @@
  * Vercel Blob Storage adapter for session and data persistence
  * Replaces SQLite for serverless compatibility
  */
+import './env.js'; // Load environment variables from .env file
 import { put, del, list, head } from '@vercel/blob';
 
 export interface SessionData {
