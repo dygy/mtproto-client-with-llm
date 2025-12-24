@@ -26,7 +26,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ settings, onChange, disabled 
         prompt: 'You are a crypto trading analyst. Analyze the message for trading signals, market sentiment, and provide brief insights on potential price movements.'
       },
       {
-        name: 'News Summarizer', 
+        name: 'News Summarizer',
         prompt: 'You are a news summarizer. Extract key information from the message and provide a concise summary highlighting the most important points.'
       },
       {
@@ -46,7 +46,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ settings, onChange, disabled 
               Configure AI processing for this chat
             </p>
           </div>
-          
+
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -145,7 +145,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ settings, onChange, disabled 
               </label>
               <input
                 type="text"
-                value={settings.keywords.join(', ')}
+                value={Array.isArray(settings.keywords) ? settings.keywords.join(', ') : settings.keywords || ''}
                 onChange={(e) => {
                   const keywords = e.target.value.split(',').map(k => k.trim()).filter(k => k);
                   onChange('keywords', keywords);
@@ -157,17 +157,18 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ settings, onChange, disabled 
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Only process messages containing these keywords (leave empty for all messages)
               </p>
-              {settings.keywords.length > 0 && (
+              {((Array.isArray(settings.keywords) && settings.keywords.length > 0) || (typeof settings.keywords === 'string' && settings.keywords.length > 0)) && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {settings.keywords.map((keyword, index) => (
+                  {(Array.isArray(settings.keywords) ? settings.keywords : settings.keywords.split(',')).map((keyword, index) => (
                     <span
                       key={index}
                       className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                     >
-                      {keyword}
+                      {typeof keyword === 'string' ? keyword.trim() : keyword}
                       <button
                         onClick={() => {
-                          const newKeywords = settings.keywords.filter((_, i) => i !== index);
+                          const keywordsArray = Array.isArray(settings.keywords) ? settings.keywords : settings.keywords.split(',').map(k => k.trim());
+                          const newKeywords = keywordsArray.filter((_, i) => i !== index);
                           onChange('keywords', newKeywords);
                         }}
                         disabled={disabled}

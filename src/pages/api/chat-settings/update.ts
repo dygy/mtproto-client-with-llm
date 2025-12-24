@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { APIRoute } from 'astro';
-import { ChatSettingsStore, type ChatSettings } from '../../../lib/database.js';
+import BlobStorage, { type ChatSettings } from '../../../lib/blob-storage.js';
 
 export const POST: APIRoute = async ({ request, redirect }) => {
   try {
@@ -42,16 +42,18 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     console.log(`Settings: LLM=${llmEnabled}, Provider=${llmProvider}, Model=${llmModel}, AutoReply=${autoReply}, Keywords="${keywords.join(', ')}"`);
 
     const settings: ChatSettings = {
-      llmEnabled,
-      llmProvider,
-      llmModel,
-      llmPrompt,
-      autoReply,
-      keywords,
+      session_id: sessionId,
+      chat_id: chatId,
+      llm_enabled: llmEnabled,
+      llm_provider: llmProvider,
+      llm_model: llmModel,
+      llm_prompt: llmPrompt,
+      auto_reply: autoReply,
+      keywords: keywords.join(','),
       notifications
     };
 
-    await ChatSettingsStore.setChatSettings(sessionId, chatId, settings);
+    await BlobStorage.setChatSettings(sessionId, chatId, settings);
 
     console.log(`✅ Chat settings updated for ${sessionId}/${chatId}`);
 

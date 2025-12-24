@@ -1,12 +1,12 @@
 // @ts-nocheck
 import type { APIRoute } from 'astro';
-import { ChatSettingsStore, type ChatSettings } from '../../../../lib/database.js';
+import BlobStorage, { type ChatSettings } from '../../../../lib/blob-storage.js';
 import { getSession } from '../../../../lib/session-store.js';
 
 export const POST: APIRoute = async ({ params, request }) => {
   try {
     const { sessionId } = params;
-    
+
     if (!sessionId) {
       return new Response(JSON.stringify({
         success: false,
@@ -52,10 +52,10 @@ export const POST: APIRoute = async ({ params, request }) => {
     }
 
     const { client } = sessionData;
-    
+
     // Get dialogs (chats) from Telegram
     const dialogs = await client.getDialogs({ limit: 100 });
-    
+
     const enabledChats = [];
     const errors = [];
 
@@ -65,16 +65,18 @@ export const POST: APIRoute = async ({ params, request }) => {
         const chatId = dialog.id?.toString();
         if (chatId) {
           const settings: ChatSettings = {
-            llmEnabled: true,
-            llmProvider: 'openai',
-            llmModel: 'gpt-4o-mini',
-            llmPrompt: defaultPrompt,
-            autoReply: false,
-            keywords: [],
+            session_id: sessionId,
+            chat_id: chatId,
+            llm_enabled: true,
+            llm_provider: 'openai',
+            llm_model: 'gpt-4o-mini',
+            llm_prompt: defaultPrompt,
+            auto_reply: false,
+            keywords: '',
             notifications: true
           };
 
-          await ChatSettingsStore.setChatSettings(sessionId, chatId, settings);
+          await BlobStorage.setChatSettings(sessionId, chatId, settings);
           enabledChats.push({
             chatId,
             title: dialog.title || dialog.name || 'Unknown Chat'
@@ -103,7 +105,7 @@ export const POST: APIRoute = async ({ params, request }) => {
 
   } catch (error) {
     console.error('Error enabling LLM for all chats:', error);
-    
+
     return new Response(JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to enable LLM for chats'

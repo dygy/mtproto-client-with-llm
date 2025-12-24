@@ -4,9 +4,9 @@
  * Each Telegram session has its own password
  */
 import { createHash, timingSafeEqual } from 'crypto';
-import BlobStorage from './blob-storage.js';
+import { put, head, del, list } from '@vercel/blob';
 
-const PASSWORD_SALT = process.env.PASSWORD_SALT || import.meta.env.PASSWORD_SALT || 'default-salt-change-me';
+const PASSWORD_SALT = process.env.PASSWORD_SALT || import.meta.env.PASSWORD_SALT;
 
 /**
  * Hash a password with salt
@@ -22,14 +22,17 @@ export function hashPassword(password: string): string {
  */
 export async function setSessionPassword(sessionId: string, password: string): Promise<void> {
   const hashedPassword = hashPassword(password);
-  
+
   // Store in blob storage
-  await BlobStorage.put(`session-password/${sessionId}.json`, JSON.stringify({
+  await put(`session-password/${sessionId}.json`, JSON.stringify({
     sessionId,
     passwordHash: hashedPassword,
     createdAt: new Date().toISOString()
   }), {
-    addRandomSuffix: false
+    access: 'public',
+    addRandomSuffix: false,
+    contentType: 'application/json',
+    allowOverwrite: true
   });
 }
 
@@ -39,15 +42,15 @@ export async function setSessionPassword(sessionId: string, password: string): P
 export async function verifySessionPassword(sessionId: string, password: string): Promise<boolean> {
   try {
     // Get stored password hash
-    const blob = await BlobStorage.head(`session-password/${sessionId}.json`);
-    if (!blob) {
+    const { blobs } = await list({ prefix: `session-password/${sessionId}.json` });
+    if (blobs.length === 0) {
       // No password set for this session
       return false;
     }
 
-    const response = await fetch(blob.url);
+    const response = await fetch(blobs[0].url);
     const data = await response.json();
-    
+
     const storedHash = data.passwordHash;
     const providedHash = hashPassword(password);
 
@@ -71,8 +74,8 @@ export async function verifySessionPassword(sessionId: string, password: string)
  */
 export async function hasSessionPassword(sessionId: string): Promise<boolean> {
   try {
-    const blob = await BlobStorage.head(`session-password/${sessionId}.json`);
-    return !!blob;
+    const { blobs } = await list({ prefix: `session-password/${sessionId}.json` });
+    return blobs.length > 0;
   } catch (error) {
     return false;
   }
@@ -83,7 +86,7 @@ export async function hasSessionPassword(sessionId: string): Promise<boolean> {
  */
 export async function deleteSessionPassword(sessionId: string): Promise<void> {
   try {
-    await BlobStorage.del(`session-password/${sessionId}.json`);
+    await del(`session-password/${sessionId}.json`);
   } catch (error) {
     console.error('Error deleting session password:', error);
   }

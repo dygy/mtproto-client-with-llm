@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { APIRoute } from 'astro';
-import { ChatSettingsStore } from '../../../../lib/database.js';
+import BlobStorage from '../../../../lib/blob-storage.js';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
@@ -16,25 +16,39 @@ export const GET: APIRoute = async ({ params }) => {
       });
     }
 
-    const settings = await ChatSettingsStore.getChatSettings(sessionId, chatId);
+    const settings = await BlobStorage.getChatSettings(sessionId, chatId);
 
-    if (settings) {
+    // Convert BlobStorage format to frontend format
+    const convertToFrontendFormat = (s: any) => ({
+      llmEnabled: s?.llm_enabled ?? false,
+      llmProvider: s?.llm_provider ?? 'openai',
+      llmModel: s?.llm_model ?? 'gpt-4o-mini',
+      llmPrompt: s?.llm_prompt ?? '',
+      autoReply: s?.auto_reply ?? false,
+      keywords: s?.keywords ? (typeof s.keywords === 'string' ? s.keywords.split(',').map(k => k.trim()).filter(k => k) : s.keywords) : [],
+      notifications: s?.notifications ?? true
+    });
+
+    // If no settings exist, return default settings
+    if (!settings) {
+      const defaultSettings = convertToFrontendFormat(null);
+
       return new Response(JSON.stringify({
         success: true,
-        settings: settings
+        settings: defaultSettings
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
-    } else {
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'Failed to get chat settings'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
     }
+
+    return new Response(JSON.stringify({
+      success: true,
+      settings: convertToFrontendFormat(settings)
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('❌ Error getting chat settings:', error);

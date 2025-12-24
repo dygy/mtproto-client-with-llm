@@ -15,9 +15,12 @@ import Layout from '../layouts/Layout.astro';
 
   // Login React Component
   function LoginApp() {
-    const [step, setStep] = React.useState('phone'); // 'phone' or 'code'
+    const [step, setStep] = React.useState('phone'); // 'phone', 'code', '2fa', or 'set-password'
     const [phoneNumber, setPhoneNumber] = React.useState('');
     const [code, setCode] = React.useState('');
+    const [telegram2faPassword, setTelegram2faPassword] = React.useState('');
+    const [sessionPassword, setSessionPassword] = React.useState('');
+    const [sessionPasswordConfirm, setSessionPasswordConfirm] = React.useState('');
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
     const [phoneCodeHash, setPhoneCodeHash] = React.useState('');
@@ -77,17 +80,107 @@ import Layout from '../layouts/Layout.astro';
         const data = await response.json();
 
         if (data.success) {
-          // Store session info
-          localStorage.setItem('telegram_session_id', data.sessionId);
-          localStorage.setItem('telegram_user_info', JSON.stringify(data.userInfo));
-
-          // Redirect to chat
-          window.location.href = `/chat?session=${data.sessionId}`;
+          // No 2FA needed, go to password setup
+          setStep('set-password');
+        } else if (data.requires2FA) {
+          // 2FA required, show 2FA step
+          setError(null);
+          setStep('2fa');
         } else {
           setError(data.message || 'Invalid verification code');
         }
       } catch (err) {
         setError('Failed to verify code');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleVerify2FA = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Verify the 2FA password with Telegram
+        const response = await fetch('/api/auth/verify-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phoneNumber: phoneNumber,
+            code: code,
+            phoneCodeHash: phoneCodeHash,
+            sessionId: sessionId,
+            telegram2faPassword: telegram2faPassword
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // 2FA verified! Move to session password setup
+          setStep('set-password');
+        } else {
+          // Show error (e.g., "Invalid 2FA password")
+          setError(data.message || 'Invalid 2FA password');
+          setTelegram2faPassword(''); // Clear the password field
+        }
+      } catch (err) {
+        setError('Failed to verify 2FA password');
+        setTelegram2faPassword('');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleSetPassword = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      setError(null);
+
+      // Validate passwords match
+      if (sessionPassword !== sessionPasswordConfirm) {
+        setError('Passwords do not match');
+        setLoading(false);
+        return;
+      }
+
+      if (sessionPassword.length < 6) {
+        setError('Password must be at least 6 characters');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Just set the session password (authentication already done)
+        const response = await fetch('/api/auth/set-session-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            sessionPassword: sessionPassword
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Store session info and unlock token
+          localStorage.setItem('telegram_session_id', data.sessionId);
+          localStorage.setItem('telegram_user_info', JSON.stringify(data.userInfo));
+          localStorage.setItem(`session_unlock_${data.sessionId}`, sessionPassword);
+
+          // Redirect to chat
+          window.location.href = `/chat?session=${data.sessionId}`;
+        } else {
+          setError(data.message || 'Failed to set session password');
+        }
+      } catch (err) {
+        setError('Failed to set session password');
       } finally {
         setLoading(false);
       }
@@ -103,7 +196,10 @@ import Layout from '../layouts/Layout.astro';
       React.createElement('div', { className: 'text-center mb-6' },
         React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-white mb-4' }, 'Create New Session'),
         React.createElement('p', { className: 'text-gray-600 dark:text-gray-400' },
-          step === 'phone' ? 'Enter your phone number to start a new Telegram session' : 'Enter the verification code sent to your phone'
+          step === 'phone' ? 'Enter your phone number to start a new Telegram session' :
+          step === 'code' ? 'Enter the verification code sent to your phone' :
+          step === '2fa' ? 'Your Telegram account has 2FA enabled. Enter your Telegram password.' :
+          'Set a password to protect this session'
         )
       ),
 
@@ -128,6 +224,7 @@ import Layout from '../layouts/Layout.astro';
             disabled: loading
           }, loading ? 'Sending...' : 'Send Verification Code')
         ) :
+      step === 'code' ?
         React.createElement('form', { onSubmit: handleVerifyCode, className: 'space-y-4' },
           React.createElement('div', null,
             React.createElement('label', { htmlFor: 'code', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Verification Code'),
@@ -154,8 +251,82 @@ import Layout from '../layouts/Layout.astro';
               type: 'submit',
               className: 'flex-1 btn btn-primary',
               disabled: loading
-            }, loading ? 'Verifying...' : 'Verify Code')
+            }, loading ? 'Verifying...' : 'Next')
           )
+        ) :
+      step === '2fa' ?
+        React.createElement('form', { onSubmit: handleVerify2FA, className: 'space-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'telegram-2fa', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Telegram 2FA Password'),
+            React.createElement('input', {
+              type: 'password',
+              id: 'telegram-2fa',
+              value: telegram2faPassword,
+              onChange: (e) => setTelegram2faPassword(e.target.value),
+              placeholder: 'Enter your Telegram password',
+              className: 'input',
+              required: true,
+              disabled: loading,
+              autoFocus: true
+            })
+          ),
+          React.createElement('div', { className: 'p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md' },
+            React.createElement('p', { className: 'text-blue-700 dark:text-blue-300 text-sm' },
+              '🔐 This is your Telegram 2FA password (not the session password)'
+            )
+          ),
+          React.createElement('div', { className: 'flex space-x-3' },
+            React.createElement('button', {
+              type: 'button',
+              onClick: handleBack,
+              className: 'flex-1 btn btn-secondary',
+              disabled: loading
+            }, 'Back'),
+            React.createElement('button', {
+              type: 'submit',
+              className: 'flex-1 btn btn-primary',
+              disabled: loading
+            }, 'Next')
+          )
+        ) :
+        React.createElement('form', { onSubmit: handleSetPassword, className: 'space-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'session-password', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Session Password'),
+            React.createElement('input', {
+              type: 'password',
+              id: 'session-password',
+              value: sessionPassword,
+              onChange: (e) => setSessionPassword(e.target.value),
+              placeholder: 'Enter password for this session',
+              className: 'input',
+              required: true,
+              disabled: loading,
+              autoFocus: true
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { htmlFor: 'session-password-confirm', className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2' }, 'Confirm Password'),
+            React.createElement('input', {
+              type: 'password',
+              id: 'session-password-confirm',
+              value: sessionPasswordConfirm,
+              onChange: (e) => setSessionPasswordConfirm(e.target.value),
+              placeholder: 'Confirm password',
+              className: 'input',
+              required: true,
+              disabled: loading
+            })
+          ),
+          React.createElement('div', { className: 'p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md' },
+            React.createElement('p', { className: 'text-blue-700 dark:text-blue-300 text-sm' },
+              '🔒 This password will be required to access this Telegram session'
+            )
+          ),
+          React.createElement('button', {
+            type: 'submit',
+            className: 'w-full btn btn-primary',
+            disabled: loading
+          }, loading ? 'Creating Session...' : 'Create Session')
         ),
 
       error && React.createElement('div', { className: 'mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-md' },
@@ -172,11 +343,26 @@ import Layout from '../layouts/Layout.astro';
   }
 
   // Initialize React app
-  document.addEventListener('DOMContentLoaded', () => {
+  function initLoginApp() {
     const container = document.getElementById('login-app');
-    if (container) {
+    if (container && !container.hasAttribute('data-initialized')) {
+      container.setAttribute('data-initialized', 'true');
       const root = createRoot(container);
       root.render(React.createElement(LoginApp));
     }
-  });
+  }
+
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', initLoginApp);
+
+  // Re-initialize after View Transitions navigation
+  document.addEventListener('astro:page-load', initLoginApp);
+
+  // Also try immediate initialization in case script loads after DOM
+  if (document.readyState === 'loading') {
+    // DOM is still loading
+  } else {
+    // DOM is already ready
+    initLoginApp();
+  }
 </script>

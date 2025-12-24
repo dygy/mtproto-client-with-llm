@@ -2,11 +2,10 @@
 import type { APIRoute } from 'astro';
 import { getSession, setSession, startConnectionMaintenance } from '../../../lib/session-store.js';
 import { setupUpdateHandlers } from '../../../lib/update-manager.js';
-import { setSessionPassword } from '../../../lib/session-password.js';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const { phoneNumber, code, phoneCodeHash, sessionId, sessionPassword, telegram2faPassword } = await request.json();
+    const { phoneNumber, code, phoneCodeHash, sessionId, telegram2faPassword } = await request.json();
 
     if (!phoneNumber || !code || !phoneCodeHash || !sessionId) {
       return new Response(JSON.stringify({
@@ -76,12 +75,6 @@ export const POST: APIRoute = async ({ request }) => {
 
         // Start connection maintenance
         startConnectionMaintenance();
-
-        // Set session password if provided
-        if (sessionPassword) {
-          console.log(`🔒 Setting password for session ${sessionId}`);
-          await setSessionPassword(sessionId, sessionPassword);
-        }
 
         return new Response(JSON.stringify({
           success: true,
@@ -158,12 +151,6 @@ export const POST: APIRoute = async ({ request }) => {
 
               // Start connection maintenance
               startConnectionMaintenance();
-
-              // Set session password if provided
-              if (sessionPassword) {
-                console.log(`🔒 Setting password for session ${sessionId}`);
-                await setSessionPassword(sessionId, sessionPassword);
-              }
 
               return new Response(JSON.stringify({
                 success: true,

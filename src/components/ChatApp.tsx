@@ -8,16 +8,43 @@ interface ChatAppProps {
 
 const ChatApp: React.FC<ChatAppProps> = ({ sessionId }) => {
   const [loading, setLoading] = useState(true);
-  const [error] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<any>(null);
 
   useEffect(() => {
-    // Simple initialization
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 100);
+    // Fetch session data to get user info
+    const fetchSessionData = async () => {
+      try {
+        // Try to get from localStorage first
+        const storedUserInfo = localStorage.getItem('telegram_user_info');
+        if (storedUserInfo) {
+          setUserInfo(JSON.parse(storedUserInfo));
+          setLoading(false);
+          return;
+        }
 
-    return () => clearTimeout(timer);
-  }, []);
+        // If not in localStorage, fetch from API
+        const response = await fetch(`/api/session/${sessionId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch session data');
+        }
+
+        const data = await response.json();
+        if (data.success && data.session?.userInfo) {
+          setUserInfo(data.session.userInfo);
+          // Store in localStorage for future use
+          localStorage.setItem('telegram_user_info', JSON.stringify(data.session.userInfo));
+        }
+      } catch (err) {
+        console.error('Error fetching session data:', err);
+        setError('Failed to load session data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSessionData();
+  }, [sessionId]);
 
   if (loading) {
     return (
@@ -52,7 +79,7 @@ const ChatApp: React.FC<ChatAppProps> = ({ sessionId }) => {
     );
   }
 
-  return <ChatInterface sessionId={sessionId} userInfo={null} />;
+  return <ChatInterface sessionId={sessionId} userInfo={userInfo} />;
 };
 
 export default ChatApp;

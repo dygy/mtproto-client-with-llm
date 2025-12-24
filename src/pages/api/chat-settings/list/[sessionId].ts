@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { APIRoute } from 'astro';
-import { ChatSettingsStore } from '../../../../lib/database.js';
+import BlobStorage from '../../../../lib/blob-storage.js';
 
 export const GET: APIRoute = async ({ params }) => {
   const { sessionId } = params;
@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ params }) => {
 
   try {
     // Get all chat settings for this session from Blob storage
-    const settings = await ChatSettingsStore.listChatSettings(sessionId);
+    const settings = await BlobStorage.listChatSettings(sessionId);
 
     return new Response(JSON.stringify({
       success: true,
@@ -42,7 +42,7 @@ export const GET: APIRoute = async ({ params }) => {
 
   } catch (error) {
     console.error('Error listing chat settings:', error);
-    
+
     return new Response(JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to list chat settings'

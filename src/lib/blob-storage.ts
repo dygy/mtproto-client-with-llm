@@ -75,7 +75,7 @@ const isBlobConfigured = () => {
 
 export class BlobStorage {
   // ============ SESSION METHODS ============
-  
+
   static async setSession(sessionId: string, sessionData: SessionData, expiresIn?: number): Promise<void> {
     if (!isBlobConfigured()) {
       throw new Error('BLOB_READ_WRITE_TOKEN is required. Please configure Vercel Blob Storage.');
@@ -108,11 +108,13 @@ export class BlobStorage {
       const blobPath = getBlobPath('session', sessionId);
       const blob = await put(blobPath, JSON.stringify(record), {
         access: 'public',
-        addRandomSuffix: false
+        addRandomSuffix: false,
+        contentType: 'application/json',
+        allowOverwrite: true  // Allow updating existing sessions
       });
 
       console.log(`💾 Session saved to Vercel Blob: ${sessionId}`);
-      
+
       // Update index
       await this.updateIndex('session', sessionId, {
         id: sessionId,
@@ -266,7 +268,9 @@ export class BlobStorage {
       // Save updated index
       await put(indexPath, JSON.stringify(index), {
         access: 'public',
-        addRandomSuffix: false
+        addRandomSuffix: false,
+        contentType: 'application/json',
+        allowOverwrite: true  // Allow updating index
       });
     } catch (error) {
       console.error('❌ Error updating index:', error);
@@ -295,7 +299,9 @@ export class BlobStorage {
       // Save updated index
       await put(indexPath, JSON.stringify(index), {
         access: 'public',
-        addRandomSuffix: false
+        addRandomSuffix: false,
+        contentType: 'application/json',
+        allowOverwrite: true  // Allow updating index
       });
     } catch (error) {
       console.error('❌ Error removing from index:', error);
@@ -321,7 +327,9 @@ export class BlobStorage {
 
       await put(blobPath, JSON.stringify(settingsData), {
         access: 'public',
-        addRandomSuffix: false
+        addRandomSuffix: false,
+        contentType: 'application/json',
+        allowOverwrite: true  // Allow updating chat settings
       });
 
       console.log(`💾 Chat settings saved: ${sessionId}/${chatId}`);
