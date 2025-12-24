@@ -114,3 +114,4 @@ Thumbs.db
 
 # Optional stylelint cache
 .stylelintcache
+/.vercel/
