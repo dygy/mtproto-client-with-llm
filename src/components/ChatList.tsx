@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiClient } from '../lib/api';
 import LLMIndicator from './LLMIndicator';
 import Avatar from './Avatar';
-import { usePinnedChatsStore, sortChatsWithPinned } from '../stores/pinnedChatsStore';
 import { avatarCache } from '../lib/avatar-cache';
 
 interface Chat {
@@ -17,6 +16,7 @@ interface Chat {
     date: string;
     fromId?: number;
     fromName?: string;
+    isOutgoing?: boolean;
   };
   info: any;
   isArchived: boolean;
@@ -42,7 +42,8 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
     chatId: number | null;
   }>({ show: false, x: 0, y: 0, chatId: null });
 
-  const { getPinnedChatsArray, isPinned, togglePin } = usePinnedChatsStore();
+  // Note: We now use Telegram's native isPinned from the API instead of localStorage
+  // const { getPinnedChatsArray, isPinned, togglePin } = usePinnedChatsStore();
 
   const loadChats = useCallback(async () => {
     try {
@@ -106,10 +107,16 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
         return chat;
       });
 
-      // Resort chats with pinned chats first, then by last message date
-      return sortChatsWithPinned(updatedChats, getPinnedChatsArray());
+      // Resort chats with pinned chats first (using Telegram's isPinned), then by last message date
+      return updatedChats.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        const aDate = a.lastMessage?.date ? new Date(a.lastMessage.date).getTime() : 0;
+        const bDate = b.lastMessage?.date ? new Date(b.lastMessage.date).getTime() : 0;
+        return bDate - aDate;
+      });
     });
-  }, [getPinnedChatsArray]);
+  }, []);
 
   const handleMessagesRead = useCallback((readData: any) => {
     if (!readData || !readData.chatId) return;
@@ -159,15 +166,38 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
     });
   }, []);
 
-  const handlePinToggle = useCallback((chatId: number) => {
-    togglePin(chatId);
-    setContextMenu({ show: false, x: 0, y: 0, chatId: null });
+  const handlePinToggle = useCallback(async (chatId: number) => {
+    try {
+      // Call Telegram API to pin/unpin the chat
+      const chat = chats.find(c => c.id === chatId);
+      if (!chat) return;
 
-    // Force re-render to update chat order immediately
-    setTimeout(() => {
-      setChats(prevChats => [...prevChats]);
-    }, 0);
-  }, [togglePin]);
+      const response = await apiClient.request(`/chats/${sessionId}/pin`, {
+        method: 'POST',
+        body: JSON.stringify({
+          chatId: chatId.toString(),
+          pin: !chat.isPinned
+        })
+      });
+
+      if (response.success) {
+        // Update local state
+        setChats(prevChats => prevChats.map(c =>
+          c.id === chatId ? { ...c, isPinned: !c.isPinned } : c
+        ).sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          const aDate = a.lastMessage?.date ? new Date(a.lastMessage.date).getTime() : 0;
+          const bDate = b.lastMessage?.date ? new Date(b.lastMessage.date).getTime() : 0;
+          return bDate - aDate;
+        }));
+      }
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+    } finally {
+      setContextMenu({ show: false, x: 0, y: 0, chatId: null });
+    }
+  }, [chats, sessionId]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu({ show: false, x: 0, y: 0, chatId: null });
@@ -182,9 +212,8 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
     }
   }, [contextMenu.show, closeContextMenu]);
 
-  // Filter and sort chats whenever they change, pinned chats change, or search query changes
+  // Filter and sort chats whenever they change or search query changes
   const filteredAndSortedChats = useMemo(() => {
-    const pinnedIds = getPinnedChatsArray();
     let filteredChats = chats;
 
     // Apply search filter
@@ -197,8 +226,15 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
       );
     }
 
-    return sortChatsWithPinned(filteredChats, pinnedIds);
-  }, [chats, getPinnedChatsArray, searchQuery]);
+    // Sort with pinned chats first (using Telegram's isPinned)
+    return filteredChats.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      const aDate = a.lastMessage?.date ? new Date(a.lastMessage.date).getTime() : 0;
+      const bDate = b.lastMessage?.date ? new Date(b.lastMessage.date).getTime() : 0;
+      return bDate - aDate;
+    });
+  }, [chats, searchQuery]);
 
   if (loading) {
     return (
@@ -248,15 +284,6 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Chats</h2>
-          <button
-            onClick={loadChats}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-            title="Refresh chats"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-            </svg>
-          </button>
         </div>
 
         {/* Search Input */}
@@ -310,17 +337,17 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
             }`}
           >
             {/* Pin icon in top-left corner */}
-            {(chat.isPinned || isPinned(chat.id)) && (
+            {chat.isPinned && (
               <div className="absolute top-2 left-2 z-10">
                 <svg className="w-3 h-3 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 6.707 6.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 6.707 6.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
               </div>
             )}
 
             <div className="flex items-center space-x-3">
               {getChatIcon(chat)}
-              
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 justify-between">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -339,16 +366,40 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
                     )}
                   </div>
                 </div>
-                
+
                 {chat.lastMessage && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate mt-1 max-w-full overflow-hidden">
-                    {chat.lastMessage.fromName && chat.type !== 'private' && (
-                      <span className="font-medium">{chat.lastMessage.fromName}: </span>
+                  <div className="flex items-center gap-1 mt-1">
+                    {/* Read indicator for outgoing messages */}
+                    {chat.lastMessage.isOutgoing && (
+                      <div className="flex-shrink-0">
+                        {chat.unreadCount === 0 ? (
+                          // Double checkmark (read) - blue
+                          <div className="flex -space-x-1" title="Read">
+                            <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        ) : (
+                          // Double checkmark (delivered) - gray
+                          <div className="flex -space-x-1" title="Delivered">
+                            <svg className="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                     )}
-                    {chat.lastMessage.text}
-                  </p>
+                    <p className={`text-sm truncate max-w-full overflow-hidden ${
+                      chat.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      {chat.lastMessage.fromName && chat.type !== 'private' && (
+                        <span className="font-medium">{chat.lastMessage.fromName}: </span>
+                      )}
+                      {chat.lastMessage.text}
+                    </p>
+                  </div>
                 )}
-                
+
                 <div className="flex items-center justify-between mt-1">
                   <div className="flex items-center space-x-2">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -397,7 +448,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({ sessionId, onChatSelect
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 6.707 6.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span>{isPinned(contextMenu.chatId) ? 'Unpin Chat' : 'Pin Chat'}</span>
+            <span>{chats.find(c => c.id === contextMenu.chatId)?.isPinned ? 'Unpin Chat' : 'Pin Chat'}</span>
           </button>
         </div>
       )}

@@ -250,17 +250,17 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
 
   const loadMessages = useCallback(async () => {
     if (!chat) return;
-    
+
     try {
       setLoading(true);
       setError('');
-      
+
       const response = await apiClient.getChatMessages(sessionId, chat.id.toString());
-      
+
       if (response.success) {
         const messagesData = response.messages || [];
         console.log(`📨 Loaded ${messagesData.length} messages for chat ${chat.title}`);
-        
+
         // Log message direction issues
         const outgoingCount = messagesData.filter((msg: any) => msg.isOutgoing).length;
         const totalCount = messagesData.length;
@@ -268,7 +268,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
           console.log(`⚠️ All ${totalCount} messages marked as outgoing - direction issue detected`);
         }
 
-        const processedMessages = messagesData.map((msg: any) => {
+        const processedMessages = messagesData.map((msg) => {
           console.log(`📨 Processing loaded message ${msg.id}:`, {
             fromName: msg.fromName,
             fromId: msg.fromId,
@@ -299,7 +299,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
         });
 
         setMessages(processedMessages);
-        
+
         // Messages loaded successfully
 
         // Auto-scroll to bottom after loading
@@ -329,16 +329,16 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
 
   const markMessagesAsRead = useCallback(async () => {
     if (!chat || messages.length === 0 || markingAsRead) return;
-    
+
     const maxMessageId = Math.max(...messages.map(m => m.id));
     if (lastReadMessageId && maxMessageId <= lastReadMessageId) {
       return; // Already marked as read
     }
-    
+
     try {
       setMarkingAsRead(true);
       const response = await apiClient.markMessagesAsRead(sessionId, chat.id.toString(), maxMessageId);
-      
+
       if (response.success) {
         setLastReadMessageId(maxMessageId);
         onMessagesRead?.(chat.id, maxMessageId);
@@ -355,7 +355,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffInHours < 24 * 7) {
@@ -395,7 +395,6 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
   useEffect(() => {
     if (chat && Object.keys(llmResults).length === 0) {
       const interval = setInterval(() => {
-        console.log('🔄 ChatView: Periodic LLM results refresh (no results yet)');
         loadLLMResults();
       }, 10000); // Refresh every 10 seconds, less frequently
 
@@ -514,7 +513,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
 
   const handleMessageSent = useCallback((sentMessage: any) => {
     console.log('✅ Message sent successfully:', sentMessage);
-    
+
     if (sentMessage) {
       setMessages(prev => [...prev, {
         id: sentMessage.id || Date.now(),
@@ -546,17 +545,17 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
 
   const handleReactionAdd = useCallback(async (messageId: number, emoji: string) => {
     console.log(`👍 Adding reaction ${emoji} to message ${messageId}`);
-    
+
     setMessages(prev => prev.map(message => {
       if (message.id === messageId) {
         const reactions = message.reactions || [];
         const existingReaction = reactions.find(r => r.emoji === emoji);
-        
+
         if (existingReaction) {
           return {
             ...message,
-            reactions: reactions.map(r => 
-              r.emoji === emoji 
+            reactions: reactions.map(r =>
+              r.emoji === emoji
                 ? { ...r, count: r.count + 1, hasReacted: true }
                 : r
             )
@@ -579,15 +578,15 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
 
   const handleReactionRemove = useCallback(async (messageId: number, emoji: string) => {
     console.log(`👎 Removing reaction ${emoji} from message ${messageId}`);
-    
+
     setMessages(prev => prev.map(message => {
       if (message.id === messageId) {
         const reactions = message.reactions || [];
-        
+
         return {
           ...message,
-          reactions: reactions.map(r => 
-            r.emoji === emoji 
+          reactions: reactions.map(r =>
+            r.emoji === emoji
               ? { ...r, count: Math.max(0, r.count - 1), hasReacted: false }
               : r
           ).filter(r => r.count > 0)
@@ -626,12 +625,12 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
               size={40}
               className="flex-shrink-0"
             />
-            
+
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                 {chat.title}
               </h2>
-              
+
               {chat.info.username && (
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   @{chat.info.username}
@@ -678,7 +677,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
       {/* Messages Container */}
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 flex flex-col min-h-0">
-          <div 
+          <div
             ref={messagesContainerRef}
             className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
           >
@@ -717,14 +716,11 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
                   const userIdStr = userInfo.id.toString();
                   const fromIdStr = message.fromId.toString();
                   isOwnMessage = userIdStr === fromIdStr;
-
-                  // Log ownership detection for debugging
-                  console.log(`📨 Message ${message.id}: userIdStr=${userIdStr}, fromIdStr=${fromIdStr}, isOwnMessage=${isOwnMessage}, message.isOutgoing=${message.isOutgoing}`);
                 } else {
                   // Fallback to message.isOutgoing if we can't compare IDs
                   isOwnMessage = message.isOutgoing || false;
                 }
-                
+
                 return (
                   <div
                     key={message.id}
@@ -761,7 +757,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
                           </span>
                         </div>
                       )}
-                      
+
                       <div className={`rounded-2xl px-4 py-2 ${
                         isOwnMessage
                           ? 'bg-blue-600 text-white'
@@ -777,7 +773,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
                             className="flex justify-center items-center mb-2"
                           />
                         )}
-                        
+
                         {message.text && (
                           <p className="whitespace-pre-wrap break-words">
                             {message.text}
@@ -823,7 +819,7 @@ const ChatView = React.forwardRef<any, ChatViewProps>(({ sessionId, chat, userIn
             <div ref={messagesEndRef} />
           </div>
 
-          <TypingIndicator 
+          <TypingIndicator
             typingUsers={typingUsers}
             className="px-4 py-2"
           />

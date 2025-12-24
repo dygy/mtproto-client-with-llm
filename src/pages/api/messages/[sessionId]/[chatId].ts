@@ -2,11 +2,66 @@
 import type { APIRoute } from 'astro';
 import { getSession, ensureClientConnected } from '../../../../lib/session-store.js';
 
+// Helper function to convert Telegram media to frontend media type
+function getMediaType(media: any): string | null {
+  if (!media) return null;
+
+  if (media.className === 'MessageMediaPhoto') {
+    return 'photo';
+  }
+
+  if (media.className === 'MessageMediaDocument' && media.document) {
+    const doc = media.document;
+    const mimeType = doc.mimeType || '';
+    const attributes = doc.attributes || [];
+
+    // Check for video
+    const isVideo = attributes.some((attr: any) =>
+      attr.className === 'DocumentAttributeVideo'
+    );
+    if (isVideo) {
+      // Check if it's a GIF (round video message or animated)
+      const isRound = attributes.some((attr: any) =>
+        attr.className === 'DocumentAttributeVideo' && attr.roundMessage
+      );
+      const isAnimated = attributes.some((attr: any) =>
+        attr.className === 'DocumentAttributeAnimated'
+      );
+
+      if (isAnimated || mimeType === 'image/gif') {
+        return 'gif';
+      }
+      return 'video';
+    }
+
+    // Check for audio
+    const isAudio = attributes.some((attr: any) =>
+      attr.className === 'DocumentAttributeAudio'
+    );
+    if (isAudio || mimeType.startsWith('audio/')) {
+      return 'audio';
+    }
+
+    // Check for sticker
+    const isSticker = attributes.some((attr: any) =>
+      attr.className === 'DocumentAttributeSticker'
+    );
+    if (isSticker) {
+      return 'sticker';
+    }
+
+    // Default to document
+    return 'document';
+  }
+
+  return null;
+}
+
 export const GET: APIRoute = async ({ params, url }) => {
   try {
     const { sessionId, chatId } = params;
     const limit = parseInt(url.searchParams.get('limit') || '50');
-    
+
     if (!sessionId || !chatId) {
       return new Response(JSON.stringify({
         success: false,
@@ -132,7 +187,7 @@ export const GET: APIRoute = async ({ params, url }) => {
           throw messagesError;
         }
       }
-      
+
       const messages = [];
       for (const message of chatMessages) {
         if (message.message || message.media) {
@@ -187,17 +242,33 @@ export const GET: APIRoute = async ({ params, url }) => {
 
           console.log(`📨 Message ${message.id}: fromId=${fromId}, currentUserId=${currentUserId}, isOutgoing=${isOutgoing}, fromName=${fromName}`);
 
+          const mediaType = getMediaType(message.media);
+
+          // Determine message status for outgoing messages
+          let status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed' = 'sent';
+          if (isOutgoing) {
+            // Check if message has been read by checking dialog's read_outbox_max_id
+            if (targetDialog.dialog && targetDialog.dialog.readOutboxMaxId) {
+              if (message.id <= targetDialog.dialog.readOutboxMaxId) {
+                status = 'read';
+              } else {
+                status = 'delivered';
+              }
+            }
+          }
+
           messages.push({
             id: message.id,
-            text: message.message || '[Media message]',
+            text: message.message || (mediaType ? `[${mediaType} message]` : ''),
             date: message.date,
             fromId: fromId,
             fromName: fromName,
             isOutgoing: isOutgoing, // Set the correct property name
             chatId: targetDialog.entity.id?.toJSNumber(),
             chatTitle: targetDialog.title,
-            hasMedia: !!(message.media?.document || message.media?.photo),
-            mediaType: message.media?.className,
+            hasMedia: !!mediaType,
+            mediaType: mediaType,
+            status: status,
             reactions: [], // Initialize empty reactions array
             media: message.media ? {
               type: message.media.className,

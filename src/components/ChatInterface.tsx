@@ -186,13 +186,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ sessionId, userInfo }) =>
 
       // Emit event for all components to receive
       eventBus.emit(EVENTS.NEW_MESSAGE, update.data);
-
-      console.log('📡 ChatInterface: Message broadcasted via event bus:', {
-        messageId: update.data.id,
-        chatId: update.data.chatId,
-        text: update.data.text?.substring(0, 50)
-      });
-
     } else if (update.type === 'llm_result') {
       // Emit LLM result event
       eventBus.emit(EVENTS.LLM_RESULT, update.data);

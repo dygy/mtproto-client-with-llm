@@ -7,7 +7,7 @@ export const GET: APIRoute = async ({ params, url }) => {
     const { sessionId, chatId } = params;
     const limit = parseInt(url.searchParams.get('limit') || '50');
     const offsetId = parseInt(url.searchParams.get('offsetId') || '0');
-    
+
     if (!sessionId || !chatId) {
       return new Response(JSON.stringify({
         success: false,
@@ -97,6 +97,23 @@ export const GET: APIRoute = async ({ params, url }) => {
 
 
 
+      // Get the dialog to access readOutboxMaxId for read status
+      let readOutboxMaxId = 0;
+      try {
+        const dialogs = await client.getDialogs({ limit: 100 });
+        const targetDialog = dialogs.find((d: any) => {
+          const entityId = d.entity?.id?.toJSNumber?.() || d.entity?.id;
+          return entityId?.toString() === chatId;
+        });
+
+        if (targetDialog && targetDialog.dialog) {
+          readOutboxMaxId = targetDialog.dialog.readOutboxMaxId || 0;
+          console.log(`📖 Chat ${chatId} readOutboxMaxId: ${readOutboxMaxId}`);
+        }
+      } catch (dialogError) {
+        console.warn(`⚠️ Could not get dialog info for read status:`, dialogError);
+      }
+
       // Get messages from the specific chat
       const options: any = { limit };
       if (offsetId > 0) {
@@ -144,7 +161,7 @@ export const GET: APIRoute = async ({ params, url }) => {
           throw messagesError;
         }
       }
-      
+
       const formattedMessages = await Promise.all(messages.map(async (message: any) => {
         if (!message.message && !message.media) {
           return null; // Skip empty messages
@@ -152,7 +169,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
         let messageText = message.message || '';
         let mediaType = null;
-        
+
         // Handle media messages
         if (message.media) {
           if (message.media.className === 'MessageMediaPhoto') {
@@ -286,6 +303,22 @@ export const GET: APIRoute = async ({ params, url }) => {
           }
         }
 
+        // Determine message status for outgoing messages
+        let status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed' = 'sent';
+        if (isOutgoing) {
+          if (readOutboxMaxId > 0) {
+            if (message.id <= readOutboxMaxId) {
+              status = 'read';
+              console.log(`✓✓ Message ${message.id} is READ (≤ ${readOutboxMaxId})`);
+            } else {
+              status = 'delivered';
+              console.log(`✓✓ Message ${message.id} is DELIVERED (> ${readOutboxMaxId})`);
+            }
+          } else {
+            console.log(`⚠️ Message ${message.id} - no readOutboxMaxId, defaulting to 'sent'`);
+          }
+        }
+
         return {
           id: message.id,
           text: messageText,
@@ -297,6 +330,7 @@ export const GET: APIRoute = async ({ params, url }) => {
           hasMedia: !!message.media,
           mediaInfo,
           isOutgoing: isOutgoing,
+          status: status,
           replyToMsgId: message.replyTo?.replyToMsgId
         };
       }));
@@ -362,7 +396,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
   } catch (error) {
     console.error('Error in chat messages endpoint:', error);
-    
+
     return new Response(JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to get chat messages'

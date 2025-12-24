@@ -6,7 +6,7 @@ export const GET: APIRoute = async ({ params, url }) => {
   try {
     const { sessionId } = params;
     const limit = parseInt(url.searchParams.get('limit') || '50');
-    
+
     if (!sessionId) {
       return new Response(JSON.stringify({
         success: false,
@@ -153,7 +153,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
     try {
       const dialogs = await client.getDialogs({ limit });
-      
+
       const chats = await Promise.all(dialogs.map(async (dialog: any) => {
         // Get the last message for preview
         let lastMessage = null;
@@ -166,7 +166,8 @@ export const GET: APIRoute = async ({ params, url }) => {
               text: msg.message || '[Media]',
               date: new Date(msg.date * 1000).toISOString(),
               fromId: msg.fromId?.userId?.toJSNumber(),
-              fromName: msg.fromId ? await getFromName(client, msg.fromId) : undefined
+              fromName: msg.fromId ? await getFromName(client, msg.fromId) : undefined,
+              isOutgoing: msg.out || false
             };
           }
         } catch (error) {
@@ -222,7 +223,7 @@ export const GET: APIRoute = async ({ params, url }) => {
           // Sort by pinned first, then by last message date
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
-          
+
           const aDate = a.lastMessage ? new Date(a.lastMessage.date).getTime() : 0;
           const bDate = b.lastMessage ? new Date(b.lastMessage.date).getTime() : 0;
           return bDate - aDate;
@@ -275,7 +276,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
   } catch (error) {
     console.error('Error in chats endpoint:', error);
-    
+
     return new Response(JSON.stringify({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to get chats'
